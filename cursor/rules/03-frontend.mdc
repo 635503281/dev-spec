@@ -1,0 +1,160 @@
+---
+description: "前端标准——TypeScript 规则、React 组件架构、状态管理、无障碍、响应式设计、浏览器测试。"
+alwaysApply: false
+globs:
+  - "src/**/*.ts"
+  - "src/**/*.tsx"
+  - "tests/**/*.test.ts"
+  - "tests/e2e/**/*.spec.ts"
+---
+
+# 前端标准
+
+## TypeScript 规则
+
+- `strict: true` — 不可妥协
+- 禁止 `any` 类型 — 使用 `unknown` + 类型守卫
+- 禁止 `@ts-ignore` — 修复类型错误
+- 禁止 `as` 类型断言 — 除非可证明安全
+- 优先使用 `interface` 定义对象结构，`type` 用于联合类型、工具类型
+- 使用 `as const` 替代枚举（除非枚举更语义化）
+- 导出只在需要被外部使用时添加
+- 禁止未使用的导入、变量或死代码
+- 生产代码中禁止 `console.log`（使用结构化日志）
+
+```typescript
+function isUser(value: unknown): value is User {
+  return typeof value === 'object' && value !== null && 'id' in value;
+}
+```
+
+---
+
+## 组件架构
+
+### 目录结构
+
+```
+src/components/
+├── ui/                    # 基础 UI 组件（Button、Input、Card）
+├── layout/                # 布局组件（Header、Sidebar、Container）
+├── features/              # 按功能组织的组件
+│   └── auth/
+│       ├── login-form.tsx
+│       ├── login-form.test.tsx
+│       └── index.ts       # Barrel 导出
+└── shared/                # 跨功能共享组件
+```
+
+### 组件规则
+
+- 只用命名导出（禁止 `export default`）
+- Props 接口定义在组件之上
+- 在函数签名中解构 props
+- 测试就近放置：`component.tsx` + `component.test.tsx`
+- 每个组件最多 150 行 — 超过就拆分子组件
+
+### 组件模板
+
+```tsx
+interface UserCardProps {
+  user: User;
+  onSelect?: (user: User) => void;
+}
+
+export function UserCard({ user, onSelect }: UserCardProps) {
+  return (
+    <div
+      role="article"
+      aria-label={`用户: ${user.name}`}
+      onClick={() => onSelect?.(user)}
+      onKeyDown={(e) => e.key === 'Enter' && onSelect?.(user)}
+      tabIndex={onSelect ? 0 : undefined}
+    >
+      <h3>{user.name}</h3>
+      <p>{user.email}</p>
+    </div>
+  );
+}
+```
+
+## 状态管理层级（选最简单够用的）
+
+1. **局部状态** (`useState`) — 组件级 UI 状态
+2. **派生状态** (`useMemo`) — 从现有状态计算得出
+3. **上下文** (`useContext`) — 子树共享（主题、认证）
+4. **URL 状态** — 过滤器、分页、标签页（用搜索参数）
+5. **服务端状态** — 远程数据（用 React Query / SWR）
+6. **全局状态** — 最后手段（需要时用 Zustand）
+
+### 反模式
+
+- 不要把表单状态放进全局 store
+- 不要在本地复制一份服务端状态
+- 不要用 context 存频繁变化的值（会导致大量重渲染）
+
+## 响应式设计（移动优先）
+
+```css
+/* 基础：移动端 */
+.container { padding: 1rem; }
+
+/* 平板：768px+ */
+@media (min-width: 768px) { .container { padding: 2rem; } }
+
+/* 桌面：1024px+ */
+@media (min-width: 1024px) { .container { max-width: 1200px; } }
+```
+
+## 无障碍（WCAG 2.1 AA）
+
+- 所有可交互元素支持键盘操作
+- 所有图片有 alt 文本
+- 颜色对比度 ≥ 4.5:1（正文），≥ 3:1（大字）
+- 所有可聚焦元素焦点可见
+- 标题层级正确（h1 → h2 → h3）
+- 表单输入有关联的 label
+- 错误消息通过 `aria-describedby` 关联到输入框
+- 显式处理三种状态：加载态、错误态、空状态
+- 使用语义化 HTML 元素（`<nav>`、`<main>`、`<article>`、`<button>`）
+
+```typescript
+test('应通过无障碍检查', async () => {
+  const { container } = render(<Component />);
+  const results = await axe(container);
+  expect(results).toHaveNoViolations();
+});
+```
+
+## 性能
+
+- 仅在性能分析显示重渲染问题时才使用 `React.memo()`
+- 使用动态 `import()` 懒加载初始页面不需要的重型组件
+- 图片优化：使用 `next/image` 并正确设置 width/height/priority
+- 避免布局偏移：始终为媒体元素指定尺寸
+- 数据获取使用并行加载（`Promise.all`），避免瀑布式串行 await
+- **Core Web Vitals** — LCP < 2.5s，FID < 100ms，CLS < 0.1
+
+## 浏览器测试（Playwright）
+
+### Playwright MCP 集成
+
+- **导航**：`browser_navigate` 跳转到 URL
+- **快照**：`browser_snapshot` 获取无障碍树
+- **点击**：`browser_click` 点击元素
+- **输入**：`browser_type` 填写输入框
+- **截图**：`browser_take_screenshot` 视觉验证
+
+### E2E 测试结构
+
+```typescript
+import { test, expect } from '@playwright/test';
+
+test.describe('功能：[名称]', () => {
+  test('当 [条件] 时应该 [行为]', async ({ page }) => {
+    await page.goto('/路径');
+    await page.getByRole('button', { name: '提交' }).click();
+    await expect(page.getByText('成功')).toBeVisible();
+  });
+});
+```

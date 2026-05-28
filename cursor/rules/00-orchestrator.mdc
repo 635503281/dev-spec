@@ -1,0 +1,479 @@
+---
+description: "全自动编排引擎。以 OpenSpec 为主线，Superpowers 为增强。将用户意图路由到正确阶段。最高优先级。"
+alwaysApply: true
+---
+
+# 全自动编排引擎
+
+**最高优先级**。此规则决定每个用户请求应走哪条工作流管线。
+
+- **主线**：OpenSpec OPSX 驱动全流程
+- **增强**：Superpowers 技能在关键节点提供深度能力
+- 用户只需说出需求，AI 自动判断阶段并调用对应工具链
+- 所有产物统一存放在 `openspec/` 目录下
+- 始终使用简体中文响应
+
+## 统一文档体系
+
+### 目录结构
+
+```
+openspec/
+├── config.yaml                          # 项目配置
+├── specs/                               # 主干规范（权威版，由 /opsx:sync 合并）
+│   ├── features/
+│   ├── api/
+│   ├── security/
+│   └── conventions/
+├── adr/                                 # 架构决策记录
+│   └── NNNN-<标题>.md
+├── changes/                             # 进行中的变更
+│   ├── .templates/                      # 产物模板
+│   ├── <change-name>/                   # 单个变更工作单元
+│   │   ├── explore.md                   # 探索记录（brainstorming 产出）
+│   │   ├── proposal.md                  # 提案（/opsx:propose 产出）
+│   │   ├── specs/                       # 增量规范（/opsx:propose 产出）
+│   │   │   └── <功能>/spec.md
+│   │   ├── design.md                    # 设计文档（/opsx:propose 产出）
+│   │   ├── tasks.md                     # 任务清单（/opsx:propose 产出，执行时同步勾选）
+│   │   ├── plans.md                     # 详细实施计划（writing-plans 产出，执行时同步更新）
+│   │   └── review.md                    # 审查记录
+│   └── archive/                         # 已归档的变更
+│       └── YYYY-MM-DD-<name>/
+└── schemas/                             # 自定义 workflow schema（可选）
+```
+
+### 产物生命周期
+
+```
+brainstorming        → explore.md       （探索记录：需求澄清、方案取舍）
+/opsx:propose        → proposal.md      （提案：基于 explore.md）
+                     → specs/           （增量规范：功能需求与验收标准）
+                     → design.md        （设计文档：技术方案）
+                     → tasks.md         （任务清单：概要级别）
+writing-plans        → plans.md         （详细计划：基于 tasks.md 展开，每步含 TDD）
+subagent/executing   → tasks.md 勾选 ✓  （同步更新进度）
+                     → plans.md 标记进度 （同步更新步骤状态）
+code-reviewer        → review.md        （审查记录）
+/opsx:sync           → openspec/specs/  （合并增量规范到主干）
+/opsx:archive        → archive/         （归档完成的 change）
+```
+
+## 意图 → 阶段 → 工具链 自动路由表
+
+```
+用户意图                    →  阶段      →  工具链
+────────────────────────────────────────────────────────────────
+"我想做一个..."             →  探索      →  brainstorming → explore.md
+"帮我想想..."               →  探索      →  brainstorming → explore.md
+"新功能/新项目/重大变更"      →  探索      →  brainstorming → explore.md
+"开始定义/确认探索"          →  定义      →  生成 proposal + specs + design + tasks
+"开始计划/制定计划"          →  计划      →  writing-plans → plans.md
+"执行计划/开始实施"          →  构建      →  subagent-driven-development
+"修复这个bug"               →  调试      →  systematic-debugging → TDD
+"看看页面效果"              →  浏览器    →  Playwright MCP
+"验证一下"                  →  验证      →  verification-before-completion
+"做完了/提交吧"             →  发布      →  finishing-a-development-branch
+"审查代码"                  →  审查      →  code-reviewer 子代理
+"需求变了/改一下需求"        →  变更      →  影响评估 → 分级处理
+"加个功能/去掉这个"          →  变更      →  影响评估 → 分级处理
+```
+
+## 七阶段全自动管线
+
+### ┃ 阶段 1：探索（brainstorming → explore.md）
+
+**触发条件**：用户提出新需求、新功能、新项目、或需求模糊时
+**主导工具**：Superpowers:brainstorming
+**产出**：`openspec/changes/<name>/explore.md`
+
+```
+第1步：创建 OpenSpec change 目录
+  └─ openspec/changes/<change-name>/
+
+第2步：调用 Superpowers:brainstorming 技能
+  ├─ 探索项目上下文（检查文件、文档、近期提交）
+  ├─ 逐个提问澄清需求（每次一个问题，多选优先）
+  ├─ 提出 2-3 种方案及取舍分析
+  ├─ 分段展示设计思路 → 获得用户认可
+  └─ 产出 → openspec/changes/<name>/explore.md
+
+explore.md 内容包括：
+  - 需求背景与目标
+  - 澄清过程中的关键决策
+  - 方案比较与最终选择
+  - 约束条件与边界
+  - 初步的技术方向
+
+🚫 门禁：explore.md 需用户确认后才能进入定义阶段
+```
+
+### ┃ 阶段 2：定义（/opsx:propose → 全套产物）
+
+**触发条件**：explore.md 已确认 / 用户说"开始定义"
+**主导工具**：OpenSpec /opsx:propose
+**输入**：explore.md
+**产出**：proposal.md → specs/ → design.md → tasks.md
+
+```
+调用 OpenSpec /opsx:propose
+  ├─ 读取 explore.md 作为输入上下文
+  ├─ 生成 proposal.md（变更理由、范围、影响）
+  ├─ 生成 specs/<功能>/spec.md（功能需求、验收标准、边界情况）
+  ├─ 生成 design.md（技术方案、架构选型、接口定义）
+  └─ 生成 tasks.md（概要任务清单，粒度较粗）
+
+产物关系：
+  explore.md → proposal.md → specs/ + design.md → tasks.md
+     (探索)      (提案)        (规范 + 设计)       (任务清单)
+
+规范自审：
+  ├─ 占位符扫描（禁止 TBD/TODO）
+  ├─ 内部一致性检查（design.md 与 specs/ 是否一致）
+  ├─ 范围检查（是否需要拆分为多个 change）
+  └─ 歧义检查
+
+🚫 门禁：全套产物需用户确认后才能进入计划阶段
+```
+
+### ┃ 阶段 3：计划（writing-plans → plans.md）
+
+**触发条件**：定义产物已确认 / 用户说"开始计划"
+**主导工具**：Superpowers:writing-plans
+**输入**：tasks.md + design.md + specs/
+**产出**：`openspec/changes/<name>/plans.md`
+
+```
+调用 Superpowers:writing-plans 技能
+  ├─ 读取 tasks.md（概要任务清单）
+  ├─ 读取 design.md 和 specs/（技术方案和需求细节）
+  ├─ 将 tasks.md 中的每个任务展开为 2-5 分钟的原子步骤
+  ├─ 每个步骤包含：失败测试 → 验证失败 → 最小实现 → 验证通过 → 提交
+  ├─ 所有步骤含精确文件路径和完整代码
+  └─ 产出 → openspec/changes/<name>/plans.md
+
+tasks.md 与 plans.md 的关系：
+  ┌───────────────────────────────────┐
+  │ tasks.md（概要清单）               │
+  │  - [ ] 任务1: 用户认证模块         │  ← 粗粒度，来自 /opsx:propose
+  │  - [ ] 任务2: 权限管理            │
+  │  - [ ] 任务3: 登录页面            │
+  └──────────────┬────────────────────┘
+                 │ writing-plans 展开
+                 ▼
+  ┌───────────────────────────────────┐
+  │ plans.md（详细计划）               │
+  │  ### 任务1: 用户认证模块           │  ← 细粒度，含 TDD 步骤
+  │  - [ ] 步骤1: 写失败测试          │
+  │  - [ ] 步骤2: 验证测试失败         │
+  │  - [ ] 步骤3: 最小实现            │
+  │  - [ ] 步骤4: 验证测试通过         │
+  │  - [ ] 步骤5: 提交               │
+  │  ### 任务2: 权限管理              │
+  │  - [ ] 步骤1: ...                │
+  └───────────────────────────────────┘
+
+两个文件不互相覆盖，各司其职：
+  - tasks.md = 概要进度看板（宏观视角）
+  - plans.md = 详细施工图纸（微观视角）
+
+计划自审：
+  ├─ 规范覆盖率检查（对照 specs/ 中每个需求）
+  ├─ 占位符扫描（禁止模糊指令）
+  ├─ 类型/命名一致性检查
+  └─ 依赖顺序检查
+
+🚫 门禁：plans.md 需用户确认后再执行
+```
+
+### ┃ 阶段 4：构建（按 plans.md 执行，同步更新进度）
+
+**触发条件**：plans.md 已确认 / 用户说"开始实施"
+**主导工具**：Superpowers:subagent-driven-development
+**执行依据**：plans.md
+**进度同步**：tasks.md + plans.md
+
+```
+优先方案：调用 Superpowers:subagent-driven-development
+  ├─ 读取 plans.md，提取所有任务和步骤
+  ├─ 每个任务分配独立的实现子代理
+  │   ├─ 子代理遵循 TDD（01-engineering-process.mdc）
+  │   ├─ RED → 验证失败 → GREEN → 验证通过 → REFACTOR → COMMIT
+  │   └─ 子代理报告状态：DONE / NEEDS_CONTEXT / BLOCKED
+  ├─ 每个步骤完成后：
+  │   ├─ 在 plans.md 中勾选该步骤 ✓
+  │   └─ 该任务所有步骤完成后，在 tasks.md 中勾选该任务 ✓
+  ├─ 每个任务完成后 → 规范合规审查子代理（对照 specs/）
+  ├─ 规范通过后 → 代码质量审查子代理
+  └─ 全部通过才标记完成
+
+进度同步规则：
+  - plans.md：步骤级粒度，每完成一步勾选一步
+  - tasks.md：任务级粒度，任务下所有步骤完成后勾选
+
+备选方案：调用 Superpowers:executing-plans
+  └─ 在当前会话中逐任务执行，设置检查点
+```
+
+### ┃ 阶段 5：验证
+
+**触发条件**：每个任务完成后自动触发 / 用户说"验证"
+
+```
+第1步：调用 Superpowers:verification-before-completion
+  ├─ pnpm typecheck    → 展示输出
+  ├─ pnpm lint         → 展示输出
+  ├─ pnpm test         → 展示输出
+  └─ pnpm build        → 展示输出
+
+第2步（涉及 UI 时）：自动调用 Playwright MCP
+  ├─ 启动开发服务器
+  ├─ browser_navigate → browser_snapshot → 验证界面
+  └─ pnpm test:e2e     → 展示输出
+
+第3步：调用 OpenSpec /opsx:verify
+  └─ 逐行对照 specs/ 检查实现完整性
+
+⚠️ 验证失败 → 自动进入调试流程
+```
+
+### ┃ 阶段 5.1：自动调试（验证失败时触发）
+
+```
+调用 Superpowers:systematic-debugging
+  ├─ 根因调查 → 模式分析 → 假设测试 → TDD 修复
+
+多个独立 bug → Superpowers:dispatching-parallel-agents
+3 次修复失败 → 停止，向用户报告架构级问题
+```
+
+### ┃ 阶段 6：审查
+
+**触发条件**：所有验证通过后自动触发
+**产出**：`openspec/changes/<name>/review.md`
+
+```
+第1步：规范合规审查（对照 specs/）
+第2步：代码质量审查（code-reviewer 子代理）
+  └─ 五轴评估：正确性 / 安全性 / 性能 / 可读性 / 可维护性
+第3步：安全审查（对照 openspec/specs/security/security-baseline.md）
+审查记录 → review.md
+发现问题 → 修复 → 重新审查
+```
+
+### ┃ 阶段 7：发布
+
+**触发条件**：审查全部通过 / 用户说"发布"
+
+```
+第1步：Superpowers:finishing-a-development-branch
+  ├─ 运行完整验证套件 → 展示变更摘要 → 合并/PR/清理
+
+第2步：OpenSpec /opsx:sync
+  └─ 将 change 内 delta specs 合并到 openspec/specs/ 主干
+
+第3步：OpenSpec /opsx:archive
+  └─ change 整体移至 openspec/changes/archive/YYYY-MM-DD-<name>/
+
+🚫 门禁：合并操作需用户确认
+```
+
+## 自动流转规则
+
+```
+探索(brainstorming) ──[用户确认 explore.md]──→ 定义(/opsx:propose)
+定义                ──[用户确认全套产物]────→ 计划(writing-plans)
+计划                ──[用户确认 plans.md]───→ 构建(subagent-driven)
+构建                ──[每个任务完成]────────→ 验证（自动）
+验证失败             ──[自动]──────────────→ 调试 → 修复 → 重新验证
+验证通过             ──[自动]──────────────→ 审查（自动）
+审查通过             ──[提示用户]──────────→ 发布(sync → archive)
+```
+
+**人工门禁**：explore.md 确认、定义产物确认、plans.md 确认、最终发布
+**全自动**：构建→验证、验证失败→调试、调试成功→重新验证、验证通过→审查
+
+## 需求中途变更流程
+
+**触发条件**：用户在构建过程中提出"需求变了"、"加个功能"、"去掉这个"、"改一下方案"等
+
+### 第1步：影响评估（必须先做）
+
+```
+收到变更请求后，AI 必须先评估：
+  ├─ 变更涉及哪些产物？（explore / proposal / specs / design / tasks / plans / 源码）
+  ├─ 已完成的任务中哪些受影响？
+  ├─ 变更性质是什么？
+  │   ├─ 微调：不改核心方向（如加个字段、调整样式）
+  │   ├─ 中等：改部分功能（如新增一个子功能、删除一个模块）
+  │   └─ 重大：改核心方向（如技术栈切换、架构推翻）
+  └─ 向用户报告评估结果，确认变更级别
+```
+
+### 第2步：按级别执行变更
+
+#### 微调变更（不改方向，如加字段、调样式）
+
+```
+需要修改的文件：
+  ├─ specs/ 中对应的 spec.md → 更新需求条目（标注 [变更] 前缀）
+  ├─ tasks.md → 在对应任务下补充变更项
+  └─ plans.md → 在对应任务下补充步骤
+
+不需要修改：
+  ├─ explore.md（探索方向未变）
+  ├─ proposal.md（提案范围未变）
+  └─ design.md（技术方案未变）
+
+流程：直接回到构建阶段，从变更点继续
+```
+
+#### 中等变更（部分功能调整，如新增/删除模块）
+
+```
+需要修改的文件：
+  ├─ specs/ 中对应的 spec.md → 更新/新增/删除需求条目
+  ├─ design.md → 更新受影响的技术方案部分
+  ├─ tasks.md → 新增/删除/修改任务项
+  ├─ plans.md → 重新生成受影响任务的步骤（调用 writing-plans）
+  └─ proposal.md → 底部追加变更记录
+
+不需要修改：
+  └─ explore.md（探索方向未变）
+
+变更记录格式（追加到 proposal.md 底部）：
+  ## 变更记录
+  ### [日期] 变更 1: [标题]
+  - **原因**：[为什么变更]
+  - **影响范围**：[涉及哪些模块]
+  - **受影响的任务**：任务 N, 任务 M
+
+流程：
+  ├─ 更新 specs → 更新 design → 更新 tasks
+  ├─ 🚫 用户确认更新后的产物
+  ├─ 重新 writing-plans（仅受影响的任务）→ 更新 plans.md
+  ├─ 🚫 用户确认更新后的 plans.md
+  └─ 回到构建阶段，从变更点继续
+```
+
+#### 重大变更（方向性调整，如推翻架构、换技术栈）
+
+```
+需要修改的文件（全部）：
+  ├─ explore.md → 追加"变更探索"章节（保留原始内容，不删除）
+  ├─ proposal.md → 重新生成（标注为 v2，保留 v1 记录）
+  ├─ specs/ → 重新生成
+  ├─ design.md → 重新生成
+  ├─ tasks.md → 重新生成（已完成的保留任务标记为 [保留] 或 [废弃]）
+  └─ plans.md → 重新生成
+
+流程（回到阶段 1 重走）：
+  ├─ brainstorming 追加探索 → 更新 explore.md
+  ├─ 🚫 用户确认
+  ├─ /opsx:propose 重新生成全套产物
+  ├─ 🚫 用户确认
+  ├─ writing-plans 重新生成 plans.md
+  ├─ 🚫 用户确认
+  └─ 回到构建阶段
+
+已完成代码的处理：
+  ├─ 与新方案兼容的 → 保留（在 tasks.md 中标为 [保留] ✓）
+  ├─ 与新方案冲突的 → 标记废弃（在 tasks.md 中标为 [废弃]）
+  └─ 废弃代码不立即删除，等新方案实施后再清理
+```
+
+### 变更中的版本追溯
+
+所有产物文件修改时遵循以下原则：
+
+- **不删除原始内容**：变更的内容用 `[变更]` 前缀标注，原始内容保留（可折叠或移到底部）
+- **记录变更原因**：每次变更在 proposal.md 的变更记录中留痕
+- **标注影响范围**：明确哪些已完成的任务受影响
+- **重大变更写 ADR**：如果涉及架构方向性调整，在 `openspec/adr/` 中新增一条 ADR
+
+## 意图识别优先级
+
+1. 需求变更（构建中提出修改） → 变更流程（影响评估 → 分级处理）
+2. 修复/调试 → 阶段 5.1
+3. 浏览器测试 → 阶段 5（Playwright）
+4. 审查代码 → 阶段 6
+5. 提交/发布 → 阶段 7
+6. 已有计划，要求执行 → 阶段 4
+7. 已有定义，要求制定计划 → 阶段 3
+8. 已有探索，要求定义 → 阶段 2
+9. 新需求/新功能 → 阶段 1
+10. 不确定 → 先提问澄清
+
+## 工具链映射总表
+
+| 阶段 | 规则文件 | OpenSpec | Superpowers | 产物 |
+|------|---------|---------|-------------|------|
+| 探索 | 00-orchestrator | — | `brainstorming` | explore.md |
+| 定义 | 00-orchestrator | `/opsx:propose` | — | proposal + specs + design + tasks |
+| 计划 | 00-orchestrator | — | `writing-plans` | plans.md |
+| 构建 | 01-engineering-process | `/opsx:apply` | `subagent-driven-dev` + `TDD` | 源码 + 进度同步 |
+| 验证 | 01-engineering-process | `/opsx:verify` | `verification` | 命令行证据 |
+| 调试 | 01-engineering-process | — | `systematic-debugging` | — |
+| 审查 | 01-engineering-process | — | `code-review` | review.md |
+| **变更** | 00-orchestrator | 按级别重走 | `brainstorming`（重大时） | 更新受影响产物 |
+| 发布 | 07-git-workflow | `/opsx:sync` + `/opsx:archive` | `finishing-branch` | 归档 |
+
+## 紧急修复快速通道
+
+跳过探索/定义/计划，直接：
+1. `systematic-debugging` → 找根因
+2. `test-driven-development` → 写失败测试 + 修复
+3. `verification-before-completion` → 验证
+4. 提交修复
+
+## Superpowers 技能路径覆盖
+
+- **brainstorming** → `openspec/changes/<name>/explore.md`（替代默认产出路径）
+- **writing-plans** → `openspec/changes/<name>/plans.md`（替代 `docs/superpowers/plans/`）
+- **subagent-driven-development** → 读取 `openspec/changes/<name>/plans.md`
+- **verification-before-completion** → 对照 `openspec/changes/<name>/specs/` 验证
+
+## 规范模板
+
+### spec.md
+
+```markdown
+# 功能：[名称]
+
+## 目标
+[一句话：这个功能为用户实现什么]
+
+## 背景
+[为什么需要这个功能，解决什么问题]
+
+## 需求
+
+### 功能性需求
+- [ ] FR-1: [需求及验收标准]
+- [ ] FR-2: [需求及验收标准]
+
+### 非功能性需求
+- [ ] NFR-1: 性能 — [具体指标]
+- [ ] NFR-2: 安全 — [具体约束]
+- [ ] NFR-3: 可访问性 — [WCAG 级别]
+
+## API 契约（如适用）
+## UI/UX（如适用）
+## 边界情况
+## 不在范围内
+## 依赖
+## 测试策略
+```
+
+### ADR
+
+重要技术决策写入 `openspec/adr/NNNN-<标题>.md`：
+
+```markdown
+# ADR-NNNN: [决策标题]
+
+## 状态
+[提议中 | 已接受 | 已弃用 | 已被取代]
+
+## 背景 / ## 决策 / ## 后果
+```

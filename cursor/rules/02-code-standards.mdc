@@ -1,0 +1,222 @@
+---
+description: "代码规范——架构、命名、错误处理、导入、注释。编写任何代码时应用。"
+alwaysApply: true
+---
+
+# 代码规范
+
+适用于所有编程语言。以 TypeScript / Node.js 为主要示例。
+
+## 核心原则
+
+1. **简洁优先** — 能用一个函数解决的，不要引入一个类；能用直接调用解决的，不要引入中间抽象层
+2. **可读性 > 聪明** — 代码写给人看。避免炫技式写法，优先选择意图清晰的表达
+3. **按需设计** — 只在有明确收益时引入设计模式或抽象，不为"将来可能需要"提前设计
+
+## 模块设计
+
+### 分层原则
+
+- 依赖方向必须单向，禁止循环依赖
+- 下层模块不得引用上层模块
+- 模块间通过明确的接口（导出的函数/类型）通信，不依赖隐式的全局状态
+
+### 职责划分
+
+- 每个文件有且只有一个明确职责，文件名应能概括其内容
+- 工具函数按领域归类到独立文件（如 `git.ts`、`template.ts`），不要堆到一个 `utils.ts` 里
+- 类型定义集中在 shared 包，各模块不重复定义相同类型
+- 每个文件最多 300 行 — 超过就拆分
+- 每个文件一个组件/模块
+- 公共 API 使用 barrel 导出（index.ts）
+- 只使用命名导出（禁止 default 导出）
+
+### 设计模式
+
+- **允许使用**：当代码出现明显的重复逻辑、复杂条件分支、或需要解耦时，可引入合适的设计模式
+- **禁止过度使用**：不要为了 2 个 if-else 引入策略模式，不要为了创建一个对象引入工厂模式
+- **判断标准**：引入模式后，代码总量是否减少？可读性是否提升？如果都不是，就不要引入
+
+## 函数设计
+
+### 长度与拆分
+
+- **不硬性限制行数**，以"单一职责"和"可读性"为标准
+- 允许逻辑连贯的长函数，只要每个步骤有清晰的注释隔开
+- 拆分的时机：当一个函数内出现可独立命名、可复用、或需要单独测试的逻辑块时
+
+### 参数设计
+
+- 参数超过 3 个时，使用对象参数（options pattern）
+- 布尔参数应使用有意义的名称，禁止 `doSomething(true, false)`
+
+```typescript
+// 差
+function createProject(name: string, type: string, git: boolean, spec: boolean) {}
+
+// 好
+function createProject(config: ProjectConfig) {}
+```
+
+### 返回值
+
+- 函数要么返回有意义的值，要么执行副作用，尽量不要两者兼顾
+- 可能失败的操作，通过返回值（如 `boolean`、`Result` 类型）或抛出异常来表达，不要静默吞掉错误
+
+## 错误处理
+
+### 分类处理
+
+| 错误类型 | 策略 | 示例 |
+|---------|------|------|
+| **致命错误** | 抛出异常，由顶层统一捕获 | 目标目录已存在、模板文件缺失 |
+| **可降级错误** | catch 后降级处理，给出提示 | git init 失败、spec-kit 未安装 |
+| **用户取消** | 识别后静默退出，不当作错误 | Ctrl+C 中断 Inquirer 交互 |
+
+### 外部边界必须防御
+
+以下场景必须有错误处理：用户输入、文件系统操作、子进程调用、网络请求、JSON 解析。
+
+### 内部调用信任类型
+
+模块内部已知类型的数据传递，信任 TypeScript 类型系统，不需要到处加运行时类型检查。
+
+```typescript
+// 不必要 — meta 类型已由 TemplateMeta 约束
+if (typeof meta.name !== 'string') throw new Error('...');
+
+// 必要 — 外部 JSON 文件内容不可信
+const raw = JSON.parse(content);
+if (!raw.name || typeof raw.name !== 'string') {
+  throw new Error(`模板 meta.json 缺少 name 字段: ${filePath}`);
+}
+```
+
+### 类型化错误
+
+```typescript
+class ValidationError extends Error {
+  constructor(
+    message: string,
+    public readonly field: string,
+    public readonly value: unknown,
+  ) {
+    super(message);
+    this.name = 'ValidationError';
+  }
+}
+```
+
+### Result 类型（显式错误处理）
+
+```typescript
+export type Result<T, E extends Error> =
+  | { ok: true; value: T }
+  | { ok: false; error: E };
+```
+
+## 命名规范
+
+### 文件命名
+
+| 类型 | 风格 | 示例 |
+|------|------|------|
+| 普通源码文件 | kebab-case | `template-utils.ts`、`git.ts` |
+| React/Vue 组件 | PascalCase | `TodoList.tsx`、`AppHeader.vue` |
+| 测试文件 | 与被测文件同名 + `.test` | `init.test.ts` |
+| 常量/配置文件 | kebab-case | `constants.ts`、`tsup.config.ts` |
+
+### 变量与函数命名
+
+| 类型 | 风格 | 示例 |
+|------|------|------|
+| 变量、函数、方法 | camelCase | `projectName`、`getTemplateList` |
+| 类 | PascalCase | `TemplateLoader`、`ConfigManager` |
+| 常量 | UPPER_SNAKE_CASE | `CLI_NAME`、`TECH_STACKS` |
+| 类型/接口 | PascalCase | `ProjectConfig`、`TemplateMeta` |
+| 枚举成员 | UPPER_SNAKE_CASE 或 PascalCase | 保持项目内一致即可 |
+| 布尔变量 | is/has/should 前缀 | `isInstalled`、`hasConfig` |
+
+### 命名原则
+
+- 名称应自解释，不需要注释来说明变量含义
+- 避免无意义缩写（`cfg`→`config`、`tmpl`→`template`、`mgr`→`manager`）
+- 允许的短名：循环变量 `i/j/k`、回调参数 `t/e`（当上下文足够清晰时）
+- 集合变量用复数，单个元素用单数
+- 禁止魔法数字——提取为命名常量
+
+## 导入规范
+
+按以下分组排列：
+
+1. Node.js 内置模块
+2. 第三方依赖
+3. 工作区内部包
+4. 当前包内的相对导入
+
+```typescript
+import { resolve } from 'node:path';
+import { readdirSync } from 'node:fs';
+import chalk from 'chalk';
+import fse from 'fs-extra';
+import type { TemplateInfo } from '@run-ls/shared';
+import { getBuiltinTemplates } from '@run-ls/templates';
+import { logger } from '../utils/logger';
+```
+
+规则：
+- Node 内置模块必须使用 `node:` 前缀
+- 相对导入省略文件后缀
+- 优先使用 `import type` 导入仅用于类型的内容
+- 禁止 `import *`（命名空间导入），除非第三方库文档推荐
+
+## 代码风格
+
+- 优先 `const`，需要重新赋值时用 `let`，禁止 `var`
+- 字符串使用单引号，模板字符串使用反引号
+- 使用严格相等 `===`
+- 条件语句中，提前 return 减少嵌套（guard clause 模式）
+
+```typescript
+// 好 — 提前 return
+function process(input: string | null) {
+  if (!input || input.length === 0) return;
+  // 处理逻辑...
+}
+```
+
+## 注释规范
+
+### 必须注释
+
+1. **函数/方法定义**：描述功能、参数、返回值
+2. **类型/接口定义**：描述用途，每个字段说明含义
+3. **常量/枚举**：描述含义
+4. **文件顶部**：简述该文件职责
+5. **关键逻辑**：非显而易见的算法、业务规则、边界处理
+
+### 禁止
+
+- 复述代码的废话注释（`// 返回结果`、`// 循环遍历数组`）
+- 给每一行都加注释
+- 注释与代码不一致
+
+### 原则
+
+解释 **为什么** 而非 **是什么** — 代码本身说明"是什么"，注释说明"为什么这样做"。
+
+## 健壮性
+
+### 边界场景检查清单
+
+- **空值**：数组为空、字符串为空、对象属性缺失
+- **边界值**：路径含空格/中文/特殊字符、超长文件名
+- **并发/顺序**：异步操作的执行顺序是否符合预期
+- **资源释放**：打开的文件句柄、子进程、定时器是否正确关闭
+- **幂等性**：同一操作执行两次是否会产生副作用
+
+### 不做过度防御
+
+- 不需要对每个函数的每个参数做运行时校验
+- 类型系统已保证的约束，不需要运行时再检查一遍
+- 内部工具函数不需要和公共 API 一样严格校验

@@ -1,0 +1,41 @@
+---
+description: "依赖纪律——安装前评估、版本锁定、体积控制。应用于包管理相关操作。"
+alwaysApply: false
+globs:
+  - "package.json"
+  - "pnpm-lock.yaml"
+  - "*.config.ts"
+  - "*.config.js"
+---
+
+# 依赖纪律
+
+## 安装前评估
+
+安装任何包之前，必须先评估：
+
+- 功能少于 20 行代码量？自己实现，不要安装包
+- 项目中是否已有实现相同功能的包？优先复用
+- 该包是否被积极维护？检查最近提交时间和 issue 量
+- 该包的包体积是否合理？`bundlephobia.com` 查体积
+- 禁止为了一个小工具函数安装整个大型库
+
+## 版本管理
+
+- 所有依赖必须锁定精确版本（lock 文件）
+- 更新依赖时先在开发环境验证，禁止生产环境盲目升级
+- 使用 `pnpm` 作为包管理器（非特殊情况禁止 npm 或 yarn）
+- 禁止在不同包管理器之间切换（会导致 lock 文件冲突）
+
+## 依赖卫生
+
+- 定期清理未使用的依赖（`depcheck` 或 `knip`）
+- 开发依赖和生产依赖严格分离（`devDependencies` vs `dependencies`）
+- 禁止安装已废弃（deprecated）的包
+- 安全漏洞依赖必须及时升级或替换（`pnpm audit`）
+
+## 导入纪律
+
+- 使用树摇友好的导入方式：`import { debounce } from 'lodash-es'`，而非 `import _ from 'lodash'`
+- 禁止 side-effect import（`import 'some-package'`），除非明确需要（如 CSS、polyfill）
+- 动态 `import()` 用于按需加载重型依赖，减少初始包体积

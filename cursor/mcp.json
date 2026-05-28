@@ -1,0 +1,27 @@
+{
+  "mcpServers": {
+    "mcp-feedback-enhanced": {
+      "type": "stdio",
+      "command": "c:\\Users\\wps\\.cursor\\extensions\\mcp-feedback.cursor-feedback-2-2.5.15\\dist\\bin\\mcp-server.exe",
+      "args": [],
+      "env": {
+        "MCP_FEEDBACK_WORKSPACE_ID": "cb307fc8a794",
+        "MCP_FEEDBACK_WORKSPACE_FOLDER": "d:\\project\\vibe-coding\\project1",
+        "MCP_FEEDBACK_WORKSPACE_NAME": "project1",
+        "MCP_FEEDBACK_STATE_DB": "c:\\Users\\wps\\AppData\\Roaming\\Cursor\\User\\workspaceStorage\\528485ff0ebb2c892ac13a1414a52ff5\\state.vscdb"
+      },
+      "timeout": 600,
+      "autoApprove": [
+        "interactive_feedback"
+      ]
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"]
+    },
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp@latest"]
+    }
+  }
+}

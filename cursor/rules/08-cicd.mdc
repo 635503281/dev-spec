@@ -1,0 +1,120 @@
+---
+description: "CI/CD 自动化——质量门禁流水线、GitHub Actions、提交钩子、功能开关、CD、部署检查。修改构建流水线时应用。"
+alwaysApply: false
+globs:
+  - ".github/**/*.yml"
+  - ".github/**/*.yaml"
+  - "*.config.ci.*"
+---
+
+# CI/CD 自动化
+
+## Docker
+
+- 使用多阶段构建以最小化镜像体积。
+- 永远不要将密钥烘焙到镜像中。使用构建参数或运行时环境变量。
+- 维护 `.dockerignore`（排除 node_modules、.env、.git、dist）。
+- 锁定基础镜像版本。生产环境禁止使用 `latest` 标签。
+- 生产容器以非 root 用户运行。
+
+## 原则
+
+1. **左移** — 尽早发现错误
+2. **越快越安全** — 短反馈循环降低风险
+3. **功能开关** — 将部署与发布解耦
+4. **流水线即代码** — 所有 CI 配置纳入版本管理
+
+## 质量门禁流水线
+
+```
+推送 → Lint → 类型检查 → 单元测试 → 构建 → 集成测试 → E2E 测试 → 部署
+```
+
+每个门禁必须通过才能运行下一步。失败 = 立即停止。
+
+## GitHub Actions 模板
+
+```yaml
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: 类型检查
+        run: pnpm typecheck
+
+      - name: Lint 检查
+        run: pnpm lint
+
+      - name: 单元与集成测试
+        run: pnpm test --coverage
+
+      - name: 生产构建
+        run: pnpm build
+
+  e2e:
+    needs: quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps
+
+      - name: E2E 测试
+        run: pnpm test:e2e
+```
+
+## 提交钩子（Husky + lint-staged）
+
+```json
+{
+  "lint-staged": {
+    "*.{ts,tsx}": ["eslint --fix", "prettier --write"],
+    "*.{json,md,yml}": ["prettier --write"]
+  }
+}
+```
+
+## 功能开关
+
+```typescript
+export const FLAGS = {
+  NEW_AUTH_FLOW: process.env.NEXT_PUBLIC_FF_NEW_AUTH === 'true',
+  DARK_MODE: process.env.NEXT_PUBLIC_FF_DARK_MODE === 'true',
+} as const;
+
+if (FLAGS.NEW_AUTH_FLOW) {
+  return <NewAuthFlow />;
+}
+return <LegacyAuthFlow />;
+```
+
+## 部署检查清单
+
+- [ ] 所有 CI 门禁通过
+- [ ] 新功能已配置功能开关
+- [ ] 回滚方案已记录
+- [ ] 监控/告警已配置
+- [ ] 数据库迁移已测试（如适用）
+- [ ] 环境变量已在目标环境中设置

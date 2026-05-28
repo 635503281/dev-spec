@@ -1,0 +1,91 @@
+---
+description: "多平台适配——适配器模式、特性检测、CEF/Electron/WebView 桥接。编写平台相关代码时应用。"
+alwaysApply: false
+globs:
+  - "src/lib/platform/**/*.ts"
+  - "src/adapters/**/*.ts"
+---
+
+# 多平台适配
+
+## 支持的目标平台
+
+| 目标 | 说明 | 检测方式 |
+|------|------|----------|
+| **Web** | 标准浏览器（Chrome、Firefox、Safari、Edge） | 默认回退 |
+| **CEF** | Chromium Embedded Framework 容器 | `window.__cef__` 存在 |
+| **Electron** | Electron 桌面应用 | `window.electron` 存在 |
+| **移动端 WebView** | iOS/Android WebView | User-agent + 桥接 API |
+
+## 架构
+
+```
+┌─────────────────────────────────────────┐
+│            应用代码（平台无关）            │
+├─────────────────────────────────────────┤
+│          平台接口（TypeScript 抽象）      │
+├──────┬──────┬──────┬───────────────────┤
+│ Web  │ CEF  │Electron│ 移动端 WebView  │
+│适配器 │适配器 │适配器  │    适配器       │
+└──────┴──────┴──────┴───────────────────┘
+```
+
+## 平台接口
+
+```typescript
+export interface PlatformBridge {
+  readonly type: 'web' | 'cef' | 'electron' | 'webview';
+  sendMessage(channel: string, data: unknown): Promise<void>;
+  onMessage(channel: string, handler: (data: unknown) => void): () => void;
+  getSystemInfo(): Promise<SystemInfo>;
+  openExternal(url: string): Promise<void>;
+  storage: PlatformStorage;
+}
+
+export interface PlatformStorage {
+  get(key: string): Promise<string | null>;
+  set(key: string, value: string): Promise<void>;
+  remove(key: string): Promise<void>;
+}
+```
+
+## 自动检测并创建
+
+```typescript
+export function createPlatform(): PlatformBridge {
+  if (typeof window !== 'undefined') {
+    if ('__cef__' in window) return new CefAdapter();
+    if ('electron' in window) return new ElectronAdapter();
+  }
+  return new WebAdapter();
+}
+
+export const platform = createPlatform();
+```
+
+## 特性检测规则
+
+- **始终**使用特性检测，不要嗅探 User-Agent
+- **始终**提供 Web 回退作为默认值
+- **绝不**在未检查的情况下假设平台 API 存在
+- **始终**处理平台桥接不可用的情况
+
+## CEF 容器测试
+
+```typescript
+test.describe('CEF 集成', () => {
+  test('当 CEF 桥接可用时应使用 CEF 桥接', async ({ page }) => {
+    await page.addInitScript(() => {
+      window.__cef__ = {
+        sendMessage: (msg: string) => { /* 模拟 */ },
+        onMessage: (cb: Function) => { /* 模拟 */ },
+      };
+    });
+    await page.goto('/');
+  });
+
+  test('没有 CEF 时应优雅降级', async ({ page }) => {
+    await page.goto('/');
+  });
+});
+```
