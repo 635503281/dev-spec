@@ -1,0 +1,68 @@
+# OpenSpec 项目配置
+# 详见：https://github.com/Fission-AI/OpenSpec
+
+# 默认 schema：spec-driven（explore → propose → plan → build → verify → ship）
+schema: spec-driven
+
+# 注入到每个 artifact 的项目上下文
+context: |
+  ## 项目约束
+
+  - 语言：TypeScript 5.x 严格模式
+  - 测试：Vitest（单元/集成）+ Playwright（E2E）
+  - 包管理器：pnpm
+  - 遵循 TDD（先写失败测试，再最小实现）
+  - 遵循约定式提交（feat/fix/test/refactor/docs/chore）
+  - 支持多平台部署：Web 浏览器、CEF 容器、Electron
+  - 所有文档和注释使用简体中文
+
+  ## 工作流：OpenSpec 主线 + Superpowers 增强
+
+  1. 探索：Superpowers:brainstorming → explore.md
+  2. 定义：/opsx:propose（基于 explore.md）→ proposal + specs + design + tasks
+  3. 计划：Superpowers:writing-plans（基于 tasks.md）→ plans.md（分离，不覆盖 tasks.md）
+  4. 构建：按 plans.md 执行，同步更新 tasks.md ✓ + plans.md ✓
+  5. 验证：/opsx:verify + verification-before-completion
+  6. 发布：/opsx:sync + /opsx:archive
+
+  ## ADR 路径
+
+  架构决策记录存放于 openspec/adr/NNNN-<标题>.md
+
+# 按 artifact 类型追加的规则
+rules:
+  explore:
+    rules: |
+      - 由 Superpowers:brainstorming 技能产出
+      - 必须逐个提问澄清需求
+      - 必须包含 2-3 种方案的取舍分析
+      - 必须获得用户确认后才能进入定义阶段
+  proposal:
+    rules: |
+      - 基于 explore.md 生成
+      - 提案必须包含"变更理由"和"影响范围"
+      - 必须标注是否涉及破坏性变更
+  specs:
+    rules: |
+      - 每个功能需求必须有可测量的验收标准
+      - 必须包含边界情况和错误场景
+      - 必须标注功能性/非功能性需求
+  design:
+    rules: |
+      - 必须包含技术方案和架构选型
+      - 必须包含接口定义
+      - 必须与 specs/ 保持一致
+  tasks:
+    rules: |
+      - 概要级别的任务清单，由 /opsx:propose 产出
+      - 粒度较粗，每个任务一句话描述
+      - 作为 writing-plans 的输入，不被 plans.md 覆盖
+      - 执行时任务级别勾选进度
+  plans:
+    rules: |
+      - 由 Superpowers:writing-plans 技能基于 tasks.md 展开生成
+      - 每个任务展开为 2-5 分钟的原子步骤
+      - 每步包含 TDD 流程：失败测试→验证失败→最小实现→验证通过→提交
+      - 禁止占位符（TBD/TODO/待定）
+      - 每步包含精确文件路径和完整代码
+      - 执行时步骤级别勾选进度
